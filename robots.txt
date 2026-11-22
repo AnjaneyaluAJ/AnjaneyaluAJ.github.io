@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://anjaneyaluaj.github.io/sitemap.xml
