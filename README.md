@@ -7,7 +7,9 @@ beyond Google Fonts.
 index.html            the whole page (edit content here)
 assets/style.css      styles; colours are tokens at the top, dark mode right below
 assets/main.js        theme toggle, mobile menu, talk filters
-assets/aj.jpg         portrait (square crop, used in the hero and the preview image)
+assets/aj-hero.jpg    hero portrait (4:5 crop, also in the preview image)
+assets/aj.jpg         square portrait (used in Google's structured data)
+assets/charts/        result charts copied from llm-pretraining/results
 assets/og-image.png   1200×630 link-preview image for LinkedIn and others
 assets/talks/         put event photos here
 tools/og-image.html   source for og-image.png
@@ -44,7 +46,7 @@ Preview locally: `python3 -m http.server` in this folder, then open http://local
 
 Search `index.html` for `TODO`, `PHOTO:` and `placeholder-link`:
 
-- to change the portrait, replace `assets/aj.jpg` with a square image, then regenerate the preview image (see below)
+- to change the portrait, replace `assets/aj-hero.jpg` (4:5) and `assets/aj.jpg` (square), then regenerate the preview image (see below)
 - event photos (drop them in `assets/talks/`, then swap the placeholder for an `<img>` as the comment shows)
 - slide and event-post links for each talk, and links to the series write-ups once they're published
 

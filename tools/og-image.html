@@ -1,21 +1,39 @@
 <!doctype html>
 <!-- Source for assets/og-image.png (1200x630). Regenerate with the command in README.md. -->
 <html><head><meta charset="utf-8">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&family=Newsreader:opsz,wght@6..72,500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600&family=Merriweather:wght@300;900&display=swap" rel="stylesheet">
 <style>
-  html,body{margin:0;width:1200px;height:630px;background:#fbfaf7;color:#1a1a18;font-family:Inter,sans-serif}
-  .wrap{box-sizing:border-box;height:100%;padding:80px 90px;display:flex;flex-direction:column;justify-content:space-between;border-left:14px solid #b4462b}
-  .eyebrow{font-family:ui-monospace,Menlo,monospace;font-size:22px;letter-spacing:.1em;text-transform:uppercase;color:#85827a}
-  h1{font-family:Newsreader,Georgia,serif;font-weight:500;font-size:96px;letter-spacing:-.03em;margin:18px 0 10px}
-  .role{font-size:34px;font-weight:500;line-height:1.35;max-width:600px}
-  .role span{color:#55534d;font-weight:400}
-  .chips{display:flex;gap:14px;flex-wrap:wrap}
-  .photo{position:absolute;right:90px;top:50%;transform:translateY(-50%);width:320px;height:320px;border-radius:24px;object-fit:cover;border:1px solid #e4e1d9}
-  .wrap{position:relative}
-  .chip{font-family:ui-monospace,Menlo,monospace;font-size:22px;background:#e3efe9;color:#1f5f4a;padding:10px 18px;border-radius:10px}
+  html,body{margin:0;width:1200px;height:630px}
+  body{background:
+    linear-gradient(rgba(148,163,214,.12) 1px,transparent 1px) 0 0/60px 60px,
+    linear-gradient(90deg,rgba(148,163,214,.12) 1px,transparent 1px) 0 0/60px 60px,
+    radial-gradient(ellipse 60% 60% at 80% 20%,rgba(37,99,235,.3),transparent 70%),#0a0f26;
+    color:#fff;font-family:Merriweather,Georgia,serif;position:relative;overflow:hidden}
+  .text{position:absolute;left:80px;top:96px;width:640px}
+  .eyebrow{font-family:Inter,sans-serif;font-weight:600;font-size:18px;letter-spacing:.24em;text-transform:uppercase;color:#aab3cf;display:flex;align-items:center;gap:14px}
+  .eyebrow i{width:10px;height:10px;border-radius:50%;background:#5b8cff;box-shadow:0 0 0 5px rgba(91,140,255,.25)}
+  h1{font-weight:900;font-size:92px;letter-spacing:-.045em;line-height:1;margin:26px 0 22px;white-space:nowrap}
+  .role{font-size:28px;font-weight:300;color:#fff}
+  .role span{color:#737d9c;margin:0 10px}
+  .stats{position:absolute;left:80px;bottom:80px;display:flex;gap:44px}
+  .stat b{display:block;font-weight:900;font-size:44px;letter-spacing:-.02em}
+  .stat small{font-family:Inter,sans-serif;font-weight:600;font-size:13px;letter-spacing:.18em;text-transform:uppercase;color:#737d9c}
+  .photo{position:absolute;right:80px;top:75px;width:384px;height:480px}
+  .photo img{width:100%;height:100%;object-fit:cover;border-radius:6px;border:1px solid rgba(255,255,255,.15)}
+  .c{position:absolute;width:26px;height:26px;border:0 solid #5b8cff}
+  .tl{top:-14px;left:-14px;border-top-width:3px;border-left-width:3px}.tr{top:-14px;right:-14px;border-top-width:3px;border-right-width:3px}
+  .bl{bottom:-14px;left:-14px;border-bottom-width:3px;border-left-width:3px}.br{bottom:-14px;right:-14px;border-bottom-width:3px;border-right-width:3px}
 </style></head>
-<body><div class="wrap"><img class="photo" src="../assets/aj.jpg" alt="">
-  <div><div class="eyebrow">AI &amp; Data Science</div><h1>Anjaneyalu T</h1>
-  <div class="role">Director of AI and Data Science<br><span>Fission Labs</span></div></div>
-  <div class="chips"><span class="chip">Production multi-agent systems</span><span class="chip">LLM pretraining from scratch</span></div>
-</div></body></html>
+<body>
+  <div class="text">
+    <div class="eyebrow"><i></i>Pretraining · Agents · Production</div>
+    <h1>Anjaneyalu T</h1>
+    <div class="role">Director of AI &amp; Data Science<span>/</span>Fission Labs</div>
+  </div>
+  <div class="stats">
+    <div class="stat"><b>30.6%</b><small>HellaSwag, from scratch</small></div>
+    <div class="stat"><b>23</b><small>Scaling-law runs</small></div>
+    <div class="stat"><b>3.9×</b><small>GPU speed-up</small></div>
+  </div>
+  <div class="photo"><img src="../assets/aj-hero.jpg" alt=""><span class="c tl"></span><span class="c tr"></span><span class="c bl"></span><span class="c br"></span></div>
+</body></html>
