@@ -188,6 +188,7 @@ h1, h2, h3, h4 { font-family: var(--serif); font-weight: 900; letter-spacing: -.
   transition: background .15s, transform .15s;
 }
 .pill:hover { text-decoration: none; background: var(--primary-hover); transform: translateY(-1px); }
+.pill { max-width: 100%; overflow-wrap: anywhere; text-align: left; }  /* long email address on narrow phones */
 .pill svg { width: 16px; height: 16px; }
 .pill-ghost { background: transparent; color: var(--on-navy); border-color: rgba(255, 255, 255, .35); }
 .pill-ghost:hover { background: rgba(255, 255, 255, .08); border-color: #fff; }

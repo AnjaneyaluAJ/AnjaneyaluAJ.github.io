@@ -37,7 +37,7 @@
 }
 
 .post .wrap { max-width: 1040px; margin: 0 auto; padding-block: 56px 96px; }
-.post .col { max-width: 700px; margin: 0 auto; }
+.post .col { max-width: 700px; margin: 0 auto; overflow-wrap: anywhere; }  /* long file paths wrap on narrow phones */
 .post h1, .post h2, .post h3, .post h4 { font-family: var(--head); color: var(--fg); line-height: 1.22; text-wrap: balance; margin: 0; letter-spacing: -.015em; }
 .post h1 { font-size: clamp(2rem, 5vw, 3rem); font-weight: 900; letter-spacing: -.03em; }
 .post h2 { font-size: 1.6rem; font-weight: 900; margin-top: 72px; }
@@ -66,7 +66,7 @@
 
 /* "In the code" notes under each step */
 .post .incode { margin-top: 22px; font-family: var(--display); font-size: 14px; line-height: 1.6; color: var(--muted); background: var(--surface); border: 1px dashed var(--line); border-radius: 8px; padding: 10px 14px; }
-.post .incode .k { font-weight: 600; font-size: 11.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--accent); margin-right: 8px; }
+.post .incode .k { font-weight: 600; font-size: 11.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--accent); margin-right: 8px; white-space: nowrap; }
 .post .incode code { font-size: .92em; }
 
 /* step headers */
