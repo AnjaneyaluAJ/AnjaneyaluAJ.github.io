@@ -7,6 +7,9 @@ beyond Google Fonts.
 index.html            the whole page (edit content here)
 assets/style.css      styles; colours are tokens at the top, dark mode right below
 assets/main.js        theme toggle, mobile menu, talk filters
+assets/post.css       styles for long-form blog posts
+blog/index.html       blog index (list of posts)
+blog/<slug>/          one folder per post: index.html + og.png (1200x630 preview/cover)
 assets/hero-phoenix.jpg  hero photo (4:5 crop of the Phoenix talk)
 assets/aj-hero.jpg    portrait (4:5 crop, used in the preview image)
 assets/aj.jpg         square portrait (used in Google's structured data)
