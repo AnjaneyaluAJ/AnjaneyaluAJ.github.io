@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Three engines, one GPU, and a prediction I wrote down first — Anjaneyalu T</title>
+  <meta name="description" content="vLLM, SGLang and TensorRT-LLM serving Qwen3-8B on one NVIDIA L40S, measured over 110,808 requests against a prediction committed before the first run, then checked again with NVIDIA AIPerf. Inference, Part 1.">
+  <meta name="author" content="Anjaneyalu T">
+  <link rel="canonical" href="https://anjaneyaluaj.github.io/blog/serving-engines/">
+  <meta name="theme-color" content="#0a0f26">
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="Anjaneyalu T">
+  <meta property="og:title" content="Three engines, one GPU, and a prediction I wrote down first">
+  <meta property="og:description" content="vLLM, SGLang and TensorRT-LLM serving Qwen3-8B on one NVIDIA L40S, measured over 110,808 requests against a prediction committed before the first run, then checked again with NVIDIA AIPerf.">
+  <meta property="og:url" content="https://anjaneyaluaj.github.io/blog/serving-engines/">
+  <meta property="og:image" content="https://anjaneyaluaj.github.io/blog/serving-engines/og.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="article:published_time" content="2026-11-24">
+  <meta property="article:author" content="Anjaneyalu T">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Three engines, one GPU, and a prediction I wrote down first">
+  <meta name="twitter:description" content="vLLM, SGLang and TensorRT-LLM serving Qwen3-8B on one NVIDIA L40S, measured over 110,808 requests, then checked again with NVIDIA AIPerf.">
+  <meta name="twitter:image" content="https://anjaneyaluaj.github.io/blog/serving-engines/og.png">
+  <script type="application/ld+json">
+  {"@context":"https://schema.org","@type":"BlogPosting","headline":"Three engines, one GPU, and a prediction I wrote down first","description":"vLLM, SGLang and TensorRT-LLM serving Qwen3-8B on one NVIDIA L40S, measured over 110,808 requests against a prediction committed before the first run, then checked again with NVIDIA AIPerf. Inference, Part 1.","datePublished":"2026-11-24","author":{"@type":"Person","name":"Anjaneyalu T","url":"https://anjaneyaluaj.github.io/"},"image":"https://anjaneyaluaj.github.io/blog/serving-engines/og.png","url":"https://anjaneyaluaj.github.io/blog/serving-engines/"}
+  </script>
+  <link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+  <script>try { var t = localStorage.getItem('theme'); if (t === 'dark' || t === 'light') document.documentElement.setAttribute('data-theme', t); } catch (e) {}</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Merriweather:wght@300;400;700;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../../assets/style.css">
+  <link rel="stylesheet" href="../../assets/post.css">
+  <style>
+    /* Post-specific: engine colours (match the charts) and the prediction number line. */
+    .post { --vllm: #2a7ad5; --sglang: #e2622d; --trt: #16a06d; --band: #d9e8fb; --chart-bg: #fbfbf9; }
+    :root[data-theme="dark"] .post { --vllm: #6aa8ee; --sglang: #f08a5d; --trt: #4cc896; --band: #23364d; }
+    .post .eng-v { color: var(--vllm); font-weight: 700; }
+    .post .eng-s { color: var(--sglang); font-weight: 700; }
+    .post .eng-t { color: var(--trt); font-weight: 700; }
+    .post td.r, .post th.r { text-align: right; white-space: nowrap; }
+    .post .tbl table { overflow-wrap: normal; }  /* the column wraps long paths; table cells must not split numbers */
+    .post td.lead { font-weight: 700; }
+    .post figure img { display: block; width: 100%; height: auto; border-radius: 10px; border: 1px solid var(--line); background: var(--chart-bg); }
+    .post .ruler { margin-top: 28px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px 14px; font-family: var(--display); }
+    .post .ruler .h { font-weight: 600; font-size: 11.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+    .post .scale { position: relative; height: 150px; margin: 10px 8px 0; }
+    .post .scale .track { position: absolute; left: 0; right: 0; top: 96px; height: 2px; background: var(--muted); }
+    .post .scale .tick { position: absolute; top: 92px; width: 1px; height: 10px; background: var(--muted); }
+    .post .scale .tl { position: absolute; top: 108px; transform: translateX(-50%); font-family: var(--mono); font-size: 12px; color: var(--muted); white-space: nowrap; }
+    .post .scale .tl.end { transform: translateX(-100%); }
+    .post .scale .band { position: absolute; top: 18px; height: 78px; background: var(--band); border-radius: 4px; }
+    .post .scale .bl { position: absolute; top: 0; transform: translateX(-50%); font-family: var(--mono); font-size: 12px; color: var(--muted); white-space: nowrap; }
+    .post .scale .limit { position: absolute; top: 18px; height: 78px; border-left: 2px dashed var(--fg); }
+    .post .scale .dot { position: absolute; width: 12px; height: 12px; border-radius: 50%; transform: translate(-50%, -50%); border: 2px solid var(--surface); }
+    .post .ruler .unit { font-size: 13px; color: var(--muted); text-align: center; }
+    .post .ruler .legend { display: flex; flex-wrap: wrap; gap: 4px 18px; font-size: 14px; margin-top: 8px; }
+    .post .ruler .legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; background: currentColor; }
+    .post .lessons { list-style: none; padding-left: 0; counter-reset: l; }
+    .post .lessons li { display: grid; grid-template-columns: 2rem 1fr; gap: 8px; margin-top: 18px; }
+    .post .lessons li::before { counter-increment: l; content: counter(l); font-family: var(--head); font-weight: 900; font-size: 1.3rem; color: var(--accent); line-height: 1.4; }
+    .post .lessons li > div { min-width: 0; }
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="nav">
+    <div class="container">
+      <a class="brand" href="../../"><span class="brand-mark">AT</span>Anjaneyalu T</a>
+      <nav aria-label="Primary">
+        <ul class="nav-links" id="nav-links">
+          <li><a href="../../#about">About</a></li>
+          <li><a href="../../#series">Technical Series</a></li>
+          <li><a href="../">Blog</a></li>
+          <li><a href="../../#open-source">Open Source</a></li>
+          <li><a href="../../#talks">Talks &amp; Workshops</a></li>
+          <li><a href="../../#contact">Contact</a></li>
+        </ul>
+      </nav>
+      <div class="nav-actions">
+        <button class="icon-btn theme-toggle" id="theme-toggle" type="button" aria-label="Switch to dark mode">
+          <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+          <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5a8.5 8.5 0 1 0 11 11z"/></svg>
+        </button>
+        <a class="nav-cta" href="../../#contact">Get in touch</a>
+        <button class="icon-btn menu-toggle" id="menu-toggle" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="nav-links">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main id="main" class="post">
+<div class="wrap">
+<article>
+
+<header class="col">
+  <a class="back" href="../">&larr; All posts</a>
+  <div class="eyebrow">Inference, Part 1 &middot; Serving engines</div>
+  <h1>Three engines, one GPU, and a prediction I wrote down first</h1>
+  <p class="lede">vLLM, SGLang and TensorRT-LLM serving the same model on the same GPU, measured over 110,808 requests. Then the whole thing checked again with NVIDIA's own benchmarking tool.</p>
+  <div class="byline"><span>Anjaneyalu T</span><span>24 November 2026</span><span>About 10 minutes</span></div>
+  <div class="status">
+    <p><b>Code and data:</b> <a href="https://github.com/AnjaneyaluAJ/llm-inference">AnjaneyaluAJ/llm-inference</a>. The plan with its prediction, the load generator, every request, and the server and GPU logs.</p>
+    <p><b>Measured:</b> 20 and 21 November 2026, on one NVIDIA L40S. The AIPerf cross-check ran on 21 November on the same machine.</p>
+  </div>
+</header>
+
+<section class="col">
+  <p>My last series was about training a model from scratch. This one is about the other half of the job: serving a model to people, fast and cheaply. The first question sounds simple. For the same model on the same GPU, which serving engine is fastest? And does the answer change with the kind of traffic you send it?</p>
+  <p>Published comparisons often test one traffic shape or leave out the settings, and some come from the engine teams themselves. So I ran my own, wrote down what I expected before running it, and published every request.</p>
+
+  <h2>The setup</h2>
+  <ul>
+    <li><strong>Model:</strong> Qwen3-8B in BF16, the same weights for every engine.</li>
+    <li><strong>GPU:</strong> one NVIDIA L40S 48 GB, on an AWS g6e.4xlarge ($3.00 an hour on-demand).</li>
+    <li><strong>Engines:</strong> <span class="eng-v">vLLM</span> v0.34.0, <span class="eng-s">SGLang</span> v0.5.23 and <span class="eng-t">TensorRT-LLM</span> 1.3.0 (PyTorch backend, <code>trtllm-serve</code>), each from its official Docker image.</li>
+    <li><strong>Client:</strong> my own load generator, the same for all three, talking to each engine's OpenAI-compatible API. Greedy decoding, and a fixed number of output tokens per request.</li>
+  </ul>
+  <p>Three traffic shapes, because real applications look very different from each other:</p>
+  <div class="tbl"><table>
+    <thead><tr><th>Workload</th><th class="r">Tokens in</th><th class="r">Tokens out</th><th>What it stresses</th></tr></thead>
+    <tbody>
+      <tr><td>Chat</td><td class="r">~1,000</td><td class="r">256</td><td>a balance of both</td></tr>
+      <tr><td>RAG</td><td class="r">~4,000</td><td class="r">128</td><td>reading long prompts</td></tr>
+      <tr><td>Generate</td><td class="r">128</td><td class="r">~1,000</td><td>producing tokens</td></tr>
+    </tbody>
+  </table></div>
+  <p>Each workload ran at 1, 2, 4 and so on up to 256 users at once, three times, in two configurations (explained below), with the engine order shuffled every repeat. That is 110,808 measured requests over about 19 GPU-hours.</p>
+
+  <h2>The prediction</h2>
+  <p>When one person is using the model, the GPU generates one token at a time. For every single token it has to read all of the model's weights out of memory. Qwen3-8B has 16.38 GB of weights, of which 1.25 GB is an embedding table that only needs one row per token. So each token means reading about 15.14 GB.</p>
+  <p>NVIDIA's spec sheet says the L40S moves 864 GB/s. I measured it instead: 746.7 GB/s for a plain read. Divide one by the other and you get a hard ceiling. No engine can generate faster than about <strong>49.3 tokens per second</strong> for one user on this GPU.</p>
+  <p>Before any engine ran, I committed this to GitHub: the fastest engine would reach 80-95% of that ceiling, so <strong>39-47 tokens/s</strong>, and all three would be within 15% of each other.</p>
+
+  <div class="ruler" role="img" aria-label="Number line from 0 to 60 tokens per second. Predicted band 39 to 47. Measured ceiling 49.3, spec-sheet ceiling 57.1. vLLM 45.5, TensorRT-LLM 45.6, SGLang 46.2.">
+    <div class="h">One user, generating 1,024 tokens</div>
+    <div class="scale">
+      <div class="band" style="left:65%; width:13.33%"></div>
+      <div class="bl" style="left:71.67%">predicted 39-47</div>
+      <div class="limit" style="left:82.17%"></div>
+      <div class="limit" style="left:95.17%"></div>
+      <div class="track"></div>
+      <div class="tick" style="left:0%"></div><div class="tl" style="left:0%">0</div>
+      <div class="tick" style="left:16.67%"></div><div class="tl" style="left:16.67%">10</div>
+      <div class="tick" style="left:33.33%"></div><div class="tl" style="left:33.33%">20</div>
+      <div class="tick" style="left:50%"></div><div class="tl" style="left:50%">30</div>
+      <div class="tick" style="left:66.67%"></div><div class="tl" style="left:66.67%">40</div>
+      <div class="tick" style="left:83.33%"></div><div class="tl" style="left:83.33%">50</div>
+      <div class="tick" style="left:100%"></div><div class="tl end" style="left:100%">60</div>
+      <div class="dot" style="left:75.83%; top:72px; background:var(--vllm)"></div>
+      <div class="dot" style="left:77%; top:56px; background:var(--sglang)"></div>
+      <div class="dot" style="left:76%; top:40px; background:var(--trt)"></div>
+    </div>
+    <div class="unit">output tokens per second &middot; dashed lines: measured ceiling 49.3, spec-sheet ceiling 57.1</div>
+    <div class="legend"><span style="color:var(--vllm)">vLLM 45.5</span><span style="color:var(--sglang)">SGLang 46.2</span><span style="color:var(--trt)">TensorRT-LLM 45.6</span></div>
+  </div>
+
+  <p><strong>Result:</strong> vLLM 45.5, SGLang 46.2, TensorRT-LLM 45.6 tokens/s. All three inside the predicted range, within 1.5% of each other, at 92-94% of the ceiling. With one user, serving is a memory-reading problem, and all three engines read memory about equally well.</p>
+  <figure>
+    <img src="01_single_user.png" alt="Bar chart: vLLM 45.5, SGLang 46.2, TensorRT-LLM 45.6 tokens per second, inside the predicted 39-47 band and below the measured ceiling of 49.3." loading="lazy" width="1200" height="1200">
+    <figcaption>Median of 3 runs. The two configurations gave identical numbers to within 0.1 tokens/s.</figcaption>
+  </figure>
+
+  <h2>Under load</h2>
+  <p>One user is the easy case. With many users the engine has to batch requests together, decide what to run next, and fit everyone's context into memory. That is where I expected the engines to separate.</p>
+  <p>To compare them fairly I set latency targets before measuring anything. 99% of requests must see their first token within 2 seconds for chat, 3 seconds for RAG and 1 second for generate, and after that get a new token at least every 50 ms. Fifty milliseconds is 20 tokens a second, faster than people read. The number that matters is the most throughput an engine delivers while still meeting those targets.</p>
+  <div class="tbl"><table>
+    <thead><tr><th>Workload</th><th class="r eng-v">vLLM</th><th class="r eng-s">SGLang</th><th class="r eng-t">TensorRT-LLM</th><th class="r">Users at that point</th></tr></thead>
+    <tbody>
+      <tr><td>Chat</td><td class="r lead">506</td><td class="r">495</td><td class="r">480</td><td class="r">16</td></tr>
+      <tr><td>RAG</td><td class="r lead">162</td><td class="r">106*</td><td class="r">151</td><td class="r">8 (SGLang: 4)</td></tr>
+      <tr><td>Generate</td><td class="r lead">1,866</td><td class="r">1,788</td><td class="r">1,747</td><td class="r">64</td></tr>
+    </tbody>
+  </table></div>
+  <p class="post-note">Output tokens per second within the latency targets, default settings, median of 3 repeats. *See "Check results that sit on a threshold" below.</p>
+  <p>vLLM leads, by 2-7%. That is a real but small lead. On RAG, vLLM's repeat-to-repeat spread was up to 5.8%, so its 7% lead over TensorRT-LLM there is only just outside the noise.</p>
+  <figure>
+    <img src="03_within_slo.png" alt="Bar charts of throughput within latency targets for chat, RAG and generate. vLLM leads each by 2 to 7 percent." loading="lazy" width="1200" height="1200">
+  </figure>
+  <p>Ignore the latency targets and push to 256 users, and vLLM reaches 3,185 tokens/s on generate against 2,722 for SGLang and 2,653 for TensorRT-LLM, 17% ahead. But at that point the slowest 1% of users wait 25 seconds for their first word, so it is not a number you would run a product on. On chat and RAG the peaks were within 6% of each other.</p>
+  <figure>
+    <img src="02_load_curves.png" alt="Three panels plotting throughput against p99 time to first token for 1 to 256 users. The three engines' curves nearly overlap; each flattens out at high load." loading="lazy" width="1200" height="1200">
+    <figcaption>Every engine flattens out. Past that point, more users only add waiting time: RAG at 256 users made the slowest 1% wait 127-143 seconds on every engine.</figcaption>
+  </figure>
+
+  <h2>What I learned</h2>
+  <ol class="lessons">
+    <li><div><strong>The traffic matters far more than the engine.</strong> At $3 an hour and within the targets, vLLM served long generation at $0.45 per million output tokens, chat at $1.65 and RAG at $5.14. That is an 11x difference between workloads, and at most 7% between engines. If you are estimating serving costs, know your prompt and output lengths before you pick an engine.</div></li>
+    <li><div><strong>Check results that sit on a threshold.</strong> SGLang's RAG number looked 35% behind vLLM. It had missed the 50 ms target at 8 users by 0.15 ms (50.15 ms; 49.5 to 50.3 across the three repeats), so it was scored at the next level down, 4 users. With matched memory settings it passed at 8 users and scored 155. The gap came from where I drew the line and the fact that I only tested powers of two, not from the engine.</div></li>
+    <li><div><strong>Defaults are not equal, but here they did not decide anything.</strong> Out of the box the engines reserve different amounts of memory for the KV cache (the per-user context): room for 186k tokens on vLLM, 175k on TensorRT-LLM and 158k on SGLang. So I ran everything a second time with all three at exactly 147,456 tokens. Results moved by about 1% or less, apart from that SGLang threshold case. None of these workloads ran out of KV memory before they ran out of compute or latency budget.</div></li>
+    <li><div><strong>Greedy decoding is not exactly repeatable.</strong> I gave every engine and configuration the same 250 GSM8K math questions. Accuracy was 93.6% everywhere except vLLM with matched memory, at 94.4% (two more right). Any two runs agreed on the final answer for 244 to 250 of the 250 questions. But the full text was identical between engines on only 168 to 189 of them, and vLLM's own output changed on 61 questions when only the memory setting changed. The likely cause, which I have not verified: different batches change the order of the arithmetic, and that occasionally flips a near-tie between two tokens. SGLang gave identical text in both configurations.</div></li>
+    <li><div><strong>Not every anomaly is a finding.</strong> 18 of the 110,808 requests finished with the right token count but no text received, all at 64 or more users, on vLLM and TensorRT-LLM only. It could be the engines or my client. I counted them as errors (under 0.5% effect on throughput where they happened) and have not blamed anyone, because I cannot yet tell which.</div></li>
+  </ol>
+
+  <h2>Second opinion: NVIDIA AIPerf</h2>
+  <p>All of the above was measured with a load generator I wrote. That is a weak point: if my client has a bias, every number has it. So I re-measured the engines with NVIDIA's AIPerf (version 0.14.0), running both tools back to back against the same running server, at 1, 16 and 64 users, three repeats, plus one 256-user stress run per engine.</p>
+  <ul>
+    <li><strong>Throughput agreed.</strong> AIPerf divided by my client ranged from 0.987 to 1.021, and 24 of 27 points were within 1%.</li>
+    <li><strong>The conclusions did not change.</strong> The engine ranking was the same under both tools at all 9 workload and user-count combinations, and every pass or fail against the latency targets was the same at all 27 points.</li>
+    <li><strong>The median wait for the first token did not agree.</strong> At 16 to 64 users AIPerf read up to 31% lower, while the 99th percentile agreed within -9% to +5%. I found two causes. AIPerf sends its warm-up prompts again in the measured run, and the engine already has those cached. And AIPerf takes a few milliseconds longer to send the next request, which spreads out the bursts of new prompts. The first cause I could confirm from vLLM's cache counters. The second is the likely explanation but not proven.</li>
+    <li><strong>Token counts differ per request.</strong> AIPerf counts tokens by re-tokenizing the text it gets back, and that differed from the server's count on 1,231 of 8,910 requests, though only -0.04% in total.</li>
+  </ul>
+  <p class="post-note">The practical lesson: a median latency at moderate load depends on details of the client, so only compare such numbers when they come from the same tool. Throughput and 99th-percentile latency held up under an independent tool.</p>
+
+  <h2>What this does not show</h2>
+  <ul>
+    <li>One model and one GPU type. No H100: there was no on-demand capacity in the regions I tried.</li>
+    <li>No engine-specific tuning. "Matched" means the same KV memory, not each engine at its best.</li>
+    <li>Prompts were random tokens with unique prefixes, so prefix caching could not help any engine. Real chat traffic with shared system prompts would behave differently.</li>
+    <li>Users were tested in steps of 2x (1, 2, 4 ... 256), so "within target" numbers move in steps. A request-rate sweep would give finer numbers.</li>
+    <li>At the heaviest points the L40S hit its power and temperature limits (clocks dropped as low as about 1,350 MHz from a median of 2,040). That affected every engine, and the order was shuffled.</li>
+  </ul>
+
+  <hr>
+  <h2>Next: a 32B model on eight GPUs</h2>
+  <p>One GPU and an 8B model is the easy case. The next experiment moves to a 32B model that does not fit on one GPU, on eight L40S, to ask how to split the work: one copy of the model spread across GPUs, or several independent copies. Same three engines, both benchmark tools.</p>
+  <p>Write-up: <a href="https://github.com/AnjaneyaluAJ/llm-inference/tree/main/results/step1">results/step1</a> &middot; AIPerf cross-check: <a href="https://github.com/AnjaneyaluAJ/llm-inference/tree/main/results/toolcmp">results/toolcmp</a> &middot; Plan and prediction: <a href="https://github.com/AnjaneyaluAJ/llm-inference/blob/main/docs/step1_engines_plan.md">docs/step1_engines_plan.md</a></p>
+
+  <p class="post-note">Anjaneyalu T. Questions and corrections are welcome: <a href="mailto:anjaneyalu.thippaiah@gmail.com">email</a> or <a href="https://www.linkedin.com/in/anjaneyalu-t-83615661">LinkedIn</a>.</p>
+</section>
+
+</article>
+</div>
+  </main>
+
+  <footer>
+    <div class="container">
+      <span>© <span id="year">2026</span> Anjaneyalu T · Hyderabad, India</span>
+      <span><a href="../../">Home</a> · <a href="https://github.com/AnjaneyaluAJ" target="_blank" rel="noopener">GitHub</a> · <a href="https://www.linkedin.com/in/anjaneyalu-t-83615661" target="_blank" rel="noopener">LinkedIn</a></span>
+    </div>
+  </footer>
+  <script src="../../assets/main.js" defer></script>
+</body>
+</html>

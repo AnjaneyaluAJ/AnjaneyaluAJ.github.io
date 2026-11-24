@@ -4,25 +4,25 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Blog — Anjaneyalu T</title>
-  <meta name="description" content="Long-form write-ups by Anjaneyalu T on production AI systems, LLM pretraining and scaling laws, with the code and the numbers behind them.">
+  <meta name="description" content="Long-form write-ups by Anjaneyalu T on production AI systems, LLM pretraining, scaling laws and inference, with the code and the numbers behind them.">
   <meta name="author" content="Anjaneyalu T">
   <link rel="canonical" href="https://anjaneyaluaj.github.io/blog/">
   <meta name="theme-color" content="#0a0f26">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="Anjaneyalu T">
   <meta property="og:title" content="Blog — Anjaneyalu T">
-  <meta property="og:description" content="Long-form write-ups on production AI systems, LLM pretraining and scaling laws, with the code and the numbers behind them.">
+  <meta property="og:description" content="Long-form write-ups on production AI systems, LLM pretraining, scaling laws and inference, with the code and the numbers behind them.">
   <meta property="og:url" content="https://anjaneyaluaj.github.io/blog/">
   <meta property="og:image" content="https://anjaneyaluaj.github.io/assets/og-image.png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Blog — Anjaneyalu T">
-  <meta name="twitter:description" content="Long-form write-ups on production AI systems, LLM pretraining and scaling laws.">
+  <meta name="twitter:description" content="Long-form write-ups on production AI systems, LLM pretraining, scaling laws and inference.">
   <meta name="twitter:image" content="https://anjaneyaluaj.github.io/assets/og-image.png">
   <script type="application/ld+json">
   {"@context":"https://schema.org","@type":"Blog","name":"Anjaneyalu T — Blog","url":"https://anjaneyaluaj.github.io/blog/","author":{"@type":"Person","name":"Anjaneyalu T","url":"https://anjaneyaluaj.github.io/"},
-   "blogPost":[{"@type":"BlogPosting","headline":"Designing a production claims assistant, one failure at a time","datePublished":"2026-11-23","url":"https://anjaneyaluaj.github.io/blog/claims-assistant/"}]}
+   "blogPost":[{"@type":"BlogPosting","headline":"Three engines, one GPU, and a prediction I wrote down first","datePublished":"2026-11-24","url":"https://anjaneyaluaj.github.io/blog/serving-engines/"},{"@type":"BlogPosting","headline":"Designing a production claims assistant, one failure at a time","datePublished":"2026-11-23","url":"https://anjaneyaluaj.github.io/blog/claims-assistant/"}]}
   </script>
   <link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
   <script>try { var t = localStorage.getItem('theme'); if (t === 'dark' || t === 'light') document.documentElement.setAttribute('data-theme', t); } catch (e) {}</script>
@@ -64,7 +64,7 @@
       <div class="container">
         <p class="label">Blog</p>
         <h1>Writing</h1>
-        <p>Long-form write-ups on production AI systems, LLM pretraining and scaling laws. Every post links to the code, and says plainly what has and has not been measured.</p>
+        <p>Long-form write-ups on production AI systems, LLM pretraining, scaling laws and inference. Every post links to the code, and says plainly what has and has not been measured.</p>
       </div>
     </section>
 
@@ -75,6 +75,15 @@
              same card to the Blog section of the homepage. Also add the URL to sitemap.xml and to the
              "blogPost" list in the JSON-LD above. -->
         <div class="post-list">
+          <a class="post-card" href="serving-engines/">
+            <div class="post-cover"><img src="serving-engines/og.png" width="1200" height="630" alt=""></div>
+            <div class="post-text">
+              <p class="kicker">Inference · Part 1 <span class="muted">· 24 Nov 2026 · 10 min read</span></p>
+              <h2>Three engines, one GPU, and a prediction I wrote down first</h2>
+              <p>vLLM, SGLang and TensorRT-LLM serving the same model on one NVIDIA L40S, measured over 110,808 requests against a prediction committed before the first run, then checked again with NVIDIA AIPerf.</p>
+              <span class="go">Read post →</span>
+            </div>
+          </a>
           <a class="post-card" href="claims-assistant/">
             <div class="post-cover"><img src="claims-assistant/og.png" width="1200" height="630" alt=""></div>
             <div class="post-text">
