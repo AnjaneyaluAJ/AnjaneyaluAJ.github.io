@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Eight GPUs with no fast links, and three predictions I got wrong — Anjaneyalu T</title>
+  <meta name="description" content="Qwen3-32B on eight NVIDIA L40S: one copy across all eight GPUs, or several smaller copies? Three splits, three engines and two benchmark tools, measured over 146,232 requests against predictions committed before the first run. Inference, Part 2.">
+  <meta name="author" content="Anjaneyalu T">
+  <link rel="canonical" href="https://anjaneyaluaj.github.io/blog/splitting-gpus/">
+  <meta name="theme-color" content="#0a0f26">
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="Anjaneyalu T">
+  <meta property="og:title" content="Eight GPUs with no fast links, and three predictions I got wrong">
+  <meta property="og:description" content="Qwen3-32B on eight NVIDIA L40S: one copy across all eight GPUs, or several smaller copies? Measured over 146,232 requests against predictions committed before the first run.">
+  <meta property="og:url" content="https://anjaneyaluaj.github.io/blog/splitting-gpus/">
+  <meta property="og:image" content="https://anjaneyaluaj.github.io/blog/splitting-gpus/og.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="article:published_time" content="2026-11-25">
+  <meta property="article:author" content="Anjaneyalu T">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Eight GPUs with no fast links, and three predictions I got wrong">
+  <meta name="twitter:description" content="Qwen3-32B on eight NVIDIA L40S: one copy across all eight GPUs, or several smaller copies? Measured over 146,232 requests.">
+  <meta name="twitter:image" content="https://anjaneyaluaj.github.io/blog/splitting-gpus/og.png">
+  <script type="application/ld+json">
+  {"@context":"https://schema.org","@type":"BlogPosting","headline":"Eight GPUs with no fast links, and three predictions I got wrong","description":"Qwen3-32B on eight NVIDIA L40S: one copy across all eight GPUs, or several smaller copies? Three splits, three engines and two benchmark tools, measured over 146,232 requests against predictions committed before the first run. Inference, Part 2.","datePublished":"2026-11-25","author":{"@type":"Person","name":"Anjaneyalu T","url":"https://anjaneyaluaj.github.io/"},"image":"https://anjaneyaluaj.github.io/blog/splitting-gpus/og.png","url":"https://anjaneyaluaj.github.io/blog/splitting-gpus/"}
+  </script>
+  <link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+  <script>try { var t = localStorage.getItem('theme'); if (t === 'dark' || t === 'light') document.documentElement.setAttribute('data-theme', t); } catch (e) {}</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Merriweather:wght@300;400;700;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../../assets/style.css">
+  <link rel="stylesheet" href="../../assets/post.css">
+  <style>
+    /* Post-specific: engine colours (match the charts) and the predictions scorecard. */
+    .post { --vllm: #2a7ad5; --sglang: #e2622d; --trt: #16a06d; --chart-bg: #fbfbf9; --held: #16a06d; --wrong: #c2410c; }
+    :root[data-theme="dark"] .post { --vllm: #6aa8ee; --sglang: #f08a5d; --trt: #4cc896; --held: #4cc896; --wrong: #f08a5d; }
+    .post .eng-v { color: var(--vllm); font-weight: 700; }
+    .post .eng-s { color: var(--sglang); font-weight: 700; }
+    .post .eng-t { color: var(--trt); font-weight: 700; }
+    .post td.r, .post th.r { text-align: right; white-space: nowrap; }
+    .post .tbl table { overflow-wrap: normal; }
+    .post td.lead { font-weight: 700; }
+    .post .verdict { font-weight: 700; white-space: nowrap; }
+    .post .verdict.held { color: var(--held); }
+    .post .verdict.wrong { color: var(--wrong); }
+    .post figure img { display: block; width: 100%; height: auto; border-radius: 10px; border: 1px solid var(--line); background: var(--chart-bg); }
+    .post .lessons { list-style: none; padding-left: 0; counter-reset: l; }
+    .post .lessons li { display: grid; grid-template-columns: 2rem 1fr; gap: 8px; margin-top: 18px; }
+    .post .lessons li::before { counter-increment: l; content: counter(l); font-family: var(--head); font-weight: 900; font-size: 1.3rem; color: var(--accent); line-height: 1.4; }
+    .post .lessons li > div { min-width: 0; }
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="nav">
+    <div class="container">
+      <a class="brand" href="../../"><span class="brand-mark">AT</span>Anjaneyalu T</a>
+      <nav aria-label="Primary">
+        <ul class="nav-links" id="nav-links">
+          <li><a href="../../#about">About</a></li>
+          <li><a href="../../#series">Technical Series</a></li>
+          <li><a href="../">Blog</a></li>
+          <li><a href="../../#open-source">Open Source</a></li>
+          <li><a href="../../#talks">Talks &amp; Workshops</a></li>
+          <li><a href="../../#contact">Contact</a></li>
+        </ul>
+      </nav>
+      <div class="nav-actions">
+        <button class="icon-btn theme-toggle" id="theme-toggle" type="button" aria-label="Switch to dark mode">
+          <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+          <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5a8.5 8.5 0 1 0 11 11z"/></svg>
+        </button>
+        <a class="nav-cta" href="../../#contact">Get in touch</a>
+        <button class="icon-btn menu-toggle" id="menu-toggle" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="nav-links">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main id="main" class="post">
+<div class="wrap">
+<article>
+
+<header class="col">
+  <a class="back" href="../">&larr; All posts</a>
+  <div class="eyebrow">Inference, Part 2 &middot; Splitting GPUs</div>
+  <h1>Eight GPUs with no fast links, and three predictions I got wrong</h1>
+  <p class="lede">A 32B model that does not fit on one GPU, eight GPUs to serve it with, and one question: one big copy of the model, or several small ones? Three engines, two benchmark tools, 146,232 requests.</p>
+  <div class="byline"><span>Anjaneyalu T</span><span>25 November 2026</span><span>About 11 minutes</span></div>
+  <div class="status">
+    <p><b>Code and data:</b> <a href="https://github.com/AnjaneyaluAJ/llm-inference">AnjaneyaluAJ/llm-inference</a>. The plan with its predictions, every request, and the server and GPU logs.</p>
+    <p><b>Measured:</b> 22 to 24 November 2026, on one AWS g6e.48xlarge (8x NVIDIA L40S).</p>
+  </div>
+</header>
+
+<section class="col">
+  <p>In <a href="../serving-engines/">Part 1</a> I served an 8B model on one GPU with three engines, and found that the traffic mattered far more than the engine. This time the model is Qwen3-32B. Its weights take 65.5 GB in BF16, and an L40S has 48 GB, so it needs at least two GPUs.</p>
+  <p>With eight GPUs there are two ways to use them, and you can mix the two:</p>
+  <ul>
+    <li><strong>Tensor parallelism (TP):</strong> one copy of the model, with every layer cut into slices across several GPUs. Each GPU holds less, so each token is faster to produce. But the GPUs must combine their partial results twice per layer, for every token.</li>
+    <li><strong>Data parallelism (DP):</strong> several independent copies, each answering different users. No communication between copies, but each copy has fewer GPUs and less memory to spare.</li>
+  </ul>
+  <p>I tested three splits of the same eight GPUs:</p>
+  <div class="tbl"><table>
+    <thead><tr><th>Split</th><th>Copies</th><th class="r">GPUs each</th><th class="r">Context room each*</th></tr></thead>
+    <tbody>
+      <tr><td>tp8</td><td>1</td><td class="r">8</td><td class="r">1,069,056</td></tr>
+      <tr><td>tp4dp2</td><td>2</td><td class="r">4</td><td class="r">407,552</td></tr>
+      <tr><td>tp2dp4</td><td>4</td><td class="r">2</td><td class="r">78,848</td></tr>
+    </tbody>
+  </table></div>
+  <p class="post-note">*Tokens of KV cache (the per-user context) each copy has room for, as reported by vLLM at start-up. TensorRT-LLM reported 4-6% less at tp8 and tp4dp2 and 2% more at tp2dp4. SGLang reported 14-16% less at tp8 and tp4dp2, and an estimated 51k at tp2dp4 (its start-up line was lost from a truncated log).</p>
+
+  <h2>The setup</h2>
+  <ul>
+    <li><strong>Model:</strong> Qwen3-32B in BF16.</li>
+    <li><strong>Hardware:</strong> AWS g6e.48xlarge, 8x NVIDIA L40S 48 GB ($30.13 an hour on-demand in us-west-2).</li>
+    <li><strong>Engines:</strong> <span class="eng-v">vLLM</span> v0.34.0, <span class="eng-s">SGLang</span> v0.5.23 and <span class="eng-t">TensorRT-LLM</span> 1.3.0, the same images as Part 1, at default settings. Only the context length (8,192) and the split were set.</li>
+    <li><strong>Several copies:</strong> vLLM and SGLang have a built-in data-parallel option. TensorRT-LLM has none for this kind of model, so it ran as separate servers behind an nginx proxy that sends each request to the least busy one.</li>
+    <li><strong>Traffic:</strong> the three workloads from Part 1. Chat (1k tokens in, 256 out), RAG (4k in, 128 out) and generate (128 in, 1k out), at 1, 16, 64 and 256 users at once, two repeats, in shuffled order.</li>
+    <li><strong>Two tools:</strong> every point was measured by my own load generator and then by NVIDIA AIPerf, back to back on the same running server. 73,116 requests each, 146,232 in all, over about 55 hours of measurement.</li>
+    <li><strong>A correctness check:</strong> every server answered 100 GSM8K math questions. All nine split and engine pairs scored 93-95%, so none of the parallel setups was quietly broken.</li>
+  </ul>
+
+  <h2>First, look at the wiring</h2>
+  <p>Tensor parallelism lives or dies by how fast the GPUs can talk to each other. So before the sweep I measured it. Two things stood out.</p>
+  <ul>
+    <li><strong>No direct GPU-to-GPU path.</strong> On this instance no pair of GPUs supports peer-to-peer access. TensorRT-LLM says so in its start-up log ("P2P not supported between local devices"), and <code>nvidia-smi</code> agrees. Data moving between GPUs goes through the host's memory.</li>
+    <li><strong>Slow collective operations.</strong> An all-reduce, the operation tensor parallelism uses to combine results, took 55 µs for a small 10 KB message on 2 GPUs, 60 µs on 4 and 86 µs on 8. For large messages the 8 GPUs together reached 2.3 GB/s of bus bandwidth. For scale, a pair of GPUs connected by NVLink moves hundreds of GB/s.</li>
+  </ul>
+  <p>So communication is expensive here, and most expensive across all eight GPUs.</p>
+
+  <h2>The predictions</h2>
+  <p>As in Part 1, I committed the predictions to GitHub before any engine ran. The ceiling for one user is the same arithmetic as before: every token reads all the weights once, now spread across the GPUs of one copy. At 746.7 GB/s per GPU that gives 22.8 tokens/s for 2 GPUs, 45.6 for 4 and 91.2 for 8.</p>
+  <div class="tbl"><table>
+    <thead><tr><th>#</th><th>Prediction</th><th>Result</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>One user: tp2 19-22, tp4 33-42, tp8 45-70 tokens/s, with tp8 furthest below its ceiling</td><td><span class="verdict held">Held</span> 9 of 9 in range</td></tr>
+      <tr><td>2</td><td>Many users: tp2dp4 has the highest peak on chat and generate, at least 20% above tp8</td><td><span class="verdict held">Held</span> for vLLM and TensorRT-LLM. SGLang's best generate split was tp4dp2</td></tr>
+      <tr><td>3</td><td>RAG at 256 users: tp2dp4 runs out of context room, so tp4dp2 or tp8 matches or beats it</td><td><span class="verdict wrong">Wrong</span> tp2dp4 won on all three engines</td></tr>
+      <tr><td>4</td><td>At a given split, the engines stay within about 10% of each other</td><td><span class="verdict wrong">Wrong</span> 15-39% apart, and the order flips</td></tr>
+      <tr><td>5</td><td>AIPerf and my client agree within 3% at every point</td><td><span class="verdict wrong">Wrong as stated</span> 85 of 108 points</td></tr>
+    </tbody>
+  </table></div>
+
+  <h2>One user: more GPUs per copy is faster</h2>
+  <p>With one user, tp8 was the fastest: 51-54 tokens/s, about 2.5x tp2's 21. But it reached only 56-59% of its ceiling, against 92-93% for tp2. Each token needs 128 all-reduces, and at 86 µs each on 8 GPUs that alone is about 11 ms per token. Reading the weights, spread over eight GPUs, also takes about 11 ms per token. So by this rough estimate, made after the run, communication costs as much as the actual work. The engines did a little better than that estimate, likely by overlapping some of the two.</p>
+  <figure>
+    <img src="01_single_user.png" alt="Bar chart of one-user generation speed. tp8: 51.0 to 53.6 tokens per second against a limit of 91.2. tp4dp2: 36.0 to 37.2 against 45.6. tp2dp4: 20.9 to 21.3 against 22.8." loading="lazy" width="1200" height="1200">
+    <figcaption>All nine results were inside the predicted ranges, and the three engines were within 6% of each other at every split.</figcaption>
+  </figure>
+
+  <h2>Many users: four small copies win, by a lot</h2>
+  <p>Push more users at the server and the order reverses. At peak throughput, four copies on two GPUs each beat one copy on eight GPUs by <strong>2.2x to 7.6x</strong>, depending on the engine and workload. On RAG, vLLM served 214 tokens/s as tp2dp4 and 28 as tp8.</p>
+  <figure>
+    <img src="02_peak.png" alt="Grouped bar charts of peak throughput for chat, RAG and generate. tp2dp4 is highest for every engine on chat and RAG, and for vLLM and TensorRT-LLM on generate; tp8 is lowest everywhere." loading="lazy" width="1200" height="1200">
+  </figure>
+  <p>The more interesting picture is how the best split changes with the number of users.</p>
+  <figure>
+    <img src="03_by_load.png" alt="Line charts of vLLM throughput against users for each split. On chat and generate tp8 leads at 1 user, tp4dp2 at 16, and tp2dp4 at 256. On RAG tp2dp4 leads from 16 users on, and tp8 flattens near 28 tokens per second." loading="lazy" width="1200" height="1200">
+    <figcaption>Log scale. tp8 levels off by 64 users on every workload.</figcaption>
+  </figure>
+  <p>For chat and generate, the winner moves from tp8 at one user, to tp4dp2 at 16 users, to tp2dp4 at 256. All three engines rank the splits the same way at every point except one (SGLang on generate at 256 users, where tp4dp2 stayed ahead). On generate at 64 users, tp4dp2 is still ahead on all three engines. There is no single best split, only the best split for a given load.</p>
+
+  <h2>What I got wrong</h2>
+  <h3>Prediction 3: I worried about memory, and the cost was in communication</h3>
+  <p>I expected RAG at 256 users to be where tp2dp4 lost. Each RAG request carries about 4,200 tokens of context. 256 users across four copies is 64 per copy, or about 270k tokens of context needed per copy, and each tp2dp4 copy only has room for 51-81k depending on the engine. That part was right: most requests waited in a queue.</p>
+  <p>What I underestimated was what tp8 pays to read a long prompt. After the run, I estimated it. Qwen3-32B has 64 layers and does 2 all-reduces per layer. For one 4,096-token prompt each all-reduce carries 42 MB, and at the measured 8-GPU speed that is about 32 ms each. That comes to about <strong>4.1 seconds of communication per prompt</strong>. At 256 users, tp8 finished one RAG request every 4.6 seconds on vLLM and 4.5 on TensorRT-LLM. Communication alone accounts for most of that. (SGLang managed 3.3 seconds, faster than the estimate, so the estimate is not the whole story for that engine.)</p>
+  <p>The same effect shows up with a single user. On RAG, tp8 is not the fastest split even for one user: tp4dp2 beats it on all three engines, by about 19% on vLLM and TensorRT-LLM and 2% on SGLang. Long prompts are where tensor parallelism over slow links hurts most.</p>
+
+  <h3>Prediction 4: the engine ranking depends on the split</h3>
+  <p>I expected the engines to stay close, as they had on one GPU. They did not, and no engine won everywhere:</p>
+  <ul>
+    <li><strong>tp8:</strong> <span class="eng-s">SGLang</span> led all three workloads by 33-36% (generate: 964 tokens/s against 723 for both others).</li>
+    <li><strong>tp4dp2:</strong> <span class="eng-s">SGLang</span> led again, by 10-13%.</li>
+    <li><strong>tp2dp4:</strong> <span class="eng-s">SGLang</span> came last. On generate it reached 2,095 tokens/s against 2,672 for vLLM. Its copies had the least room for context, about 51k tokens against 79-81k, and generate at 256 users needs up to 74k per copy. That fits the lower number, but I did not test it directly.</li>
+  </ul>
+  <p>Throughput is also not the whole picture. At tp8 with 256 chat users, SGLang served 40% more tokens/s than vLLM (248 against 177), but its median user waited 103 seconds for the first token, against 9 seconds on vLLM.</p>
+
+  <h3>Prediction 5: the two tools, again</h3>
+  <p>AIPerf and my client agreed within 3% on 85 of 108 points, with a median ratio of 1.006. The exceptions have known causes. 19 of them are at 1 or 16 users, where AIPerf reads 3-14% high because it re-uses its warm-up prompts in the measured run, the issue I found in Part 1. The engine has those prompts cached, so their prefill is skipped, and on tp8 prefill is the expensive part. Two more are tp8 RAG at 256 users, where my client's 600-second timeout cut off requests that were still waiting; I report AIPerf's numbers there. The last two are the two points with the largest difference between repeats.</p>
+
+  <h2>What it costs</h2>
+  <p>At $30.13 an hour, divided by the peak throughput:</p>
+  <div class="tbl"><table>
+    <thead><tr><th>Per million output tokens, vLLM</th><th class="r">Chat</th><th class="r">RAG</th><th class="r">Generate</th></tr></thead>
+    <tbody>
+      <tr><td>tp8</td><td class="r">$45.74</td><td class="r">$298.92</td><td class="r">$11.58</td></tr>
+      <tr><td>tp4dp2</td><td class="r">$12.80</td><td class="r">$79.71</td><td class="r">$3.95</td></tr>
+      <tr><td>tp2dp4</td><td class="r lead">$7.52</td><td class="r lead">$39.11</td><td class="r lead">$3.13</td></tr>
+    </tbody>
+  </table></div>
+  <p class="post-note">At peak throughput with no latency target, so users waited seconds to minutes for the first token. Not comparable with Part 1's costs, which were measured within latency targets. Other engines are in the <a href="https://github.com/AnjaneyaluAJ/llm-inference/tree/main/results/step2">write-up</a>.</p>
+  <p>Same hardware, same model, same engine: choosing the split changed the cost by up to 7.6x. On this machine, the choice of split mattered far more than the choice of engine.</p>
+
+  <h2>The loose end from Part 1</h2>
+  <p>In Part 1, 18 requests finished with the right token count but no text, and I could not tell whether the engine or my client was at fault. This run produced 279 of them, all on generate and all on vLLM or TensorRT-LLM. This time my client saved the raw stream for each one, and every chunk's text field is empty from first to last. The engine sent no text, so the client did not lose it.</p>
+  <p>They also depend on the prompt. The prompts are the same across splits and engines, and vLLM and TensorRT-LLM fail on the same or nearly the same number of requests at every point, while SGLang never fails on them. My best guess, not yet verified: my client asks for exactly 1,024 tokens and tells the engine to ignore the end-of-text token. If the model's first token is end-of-text, generation continues with tokens that decode to nothing. Checking it needs the generated token IDs, which I did not save.</p>
+
+  <h2>What I learned</h2>
+  <ol class="lessons">
+    <li><div><strong>Measure the wiring before you pick a split.</strong> Eight GPUs in one box does not mean eight GPUs that can talk quickly. Here a 10 KB all-reduce took 86 µs and no pair of GPUs could reach another directly. On hardware with NVLink, tensor parallelism costs far less, and these results could look very different.</div></li>
+    <li><div><strong>Choose the split by the load you expect.</strong> For a single user who wants the fastest reply, tp8 was 2.5x faster than tp2. For many users, four small copies served 2.2-7.6x more. A split that fits a demo can be the wrong one in production.</div></li>
+    <li><div><strong>Long prompts are where tensor parallelism hurts most.</strong> The cost of reading a prompt grows with its length, and on slow links that cost is communication. On RAG, tp8 lost even with one user.</div></li>
+    <li><div><strong>An engine benchmark holds for one setup only.</strong> SGLang went from first by a third at tp8 to last at tp2dp4. "Engine X is fastest" needs the hardware, the split and the traffic attached.</div></li>
+    <li><div><strong>Wrong predictions were the most useful part.</strong> The three I got wrong are where I learned something: what prefill costs over PCIe, how much the engines differ at different splits, and where the two benchmark tools part ways.</div></li>
+  </ol>
+
+  <h2>What this does not show</h2>
+  <ul>
+    <li>One model, one instance type, default engine settings. No NVLink.</li>
+    <li>Two repeats. The median difference between them was 0.3%, and 107 of 108 points were within 5%.</li>
+    <li>Peaks with no latency target. Unlike Part 1, I did not score these splits against latency targets.</li>
+    <li>The communication estimates and the costs were worked out after the run. They were not predictions.</li>
+  </ul>
+
+  <hr>
+  <h2>Next: smaller numbers</h2>
+  <p>If the model is the problem, make it smaller. Part 3 serves the same model in FP8 and 4-bit, where it fits on one GPU, so the split can go to eight independent copies with no communication at all. It is running now on the same instance, with its predictions already on GitHub.</p>
+  <p>Write-up: <a href="https://github.com/AnjaneyaluAJ/llm-inference/tree/main/results/step2">results/step2</a> &middot; Plan and predictions: <a href="https://github.com/AnjaneyaluAJ/llm-inference/blob/main/docs/step2_parallel_plan.md">docs/step2_parallel_plan.md</a> &middot; Part 3 plan: <a href="https://github.com/AnjaneyaluAJ/llm-inference/blob/main/docs/step3_quant_plan.md">docs/step3_quant_plan.md</a></p>
+
+  <p class="post-note">Anjaneyalu T. Questions and corrections are welcome: <a href="mailto:anjaneyalu.thippaiah@gmail.com">email</a> or <a href="https://www.linkedin.com/in/anjaneyalu-t-83615661">LinkedIn</a>.</p>
+</section>
+
+</article>
+</div>
+  </main>
+
+  <footer>
+    <div class="container">
+      <span>© <span id="year">2026</span> Anjaneyalu T · Hyderabad, India</span>
+      <span><a href="../../">Home</a> · <a href="https://github.com/AnjaneyaluAJ" target="_blank" rel="noopener">GitHub</a> · <a href="https://www.linkedin.com/in/anjaneyalu-t-83615661" target="_blank" rel="noopener">LinkedIn</a></span>
+    </div>
+  </footer>
+  <script src="../../assets/main.js" defer></script>
+</body>
+</html>

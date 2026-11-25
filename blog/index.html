@@ -22,7 +22,7 @@
   <meta name="twitter:image" content="https://anjaneyaluaj.github.io/assets/og-image.png">
   <script type="application/ld+json">
   {"@context":"https://schema.org","@type":"Blog","name":"Anjaneyalu T — Blog","url":"https://anjaneyaluaj.github.io/blog/","author":{"@type":"Person","name":"Anjaneyalu T","url":"https://anjaneyaluaj.github.io/"},
-   "blogPost":[{"@type":"BlogPosting","headline":"Three engines, one GPU, and a prediction I wrote down first","datePublished":"2026-11-24","url":"https://anjaneyaluaj.github.io/blog/serving-engines/"},{"@type":"BlogPosting","headline":"Designing a production claims assistant, one failure at a time","datePublished":"2026-11-23","url":"https://anjaneyaluaj.github.io/blog/claims-assistant/"}]}
+   "blogPost":[{"@type":"BlogPosting","headline":"Eight GPUs with no fast links, and three predictions I got wrong","datePublished":"2026-11-25","url":"https://anjaneyaluaj.github.io/blog/splitting-gpus/"},{"@type":"BlogPosting","headline":"Three engines, one GPU, and a prediction I wrote down first","datePublished":"2026-11-24","url":"https://anjaneyaluaj.github.io/blog/serving-engines/"},{"@type":"BlogPosting","headline":"Designing a production claims assistant, one failure at a time","datePublished":"2026-11-23","url":"https://anjaneyaluaj.github.io/blog/claims-assistant/"}]}
   </script>
   <link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
   <script>try { var t = localStorage.getItem('theme'); if (t === 'dark' || t === 'light') document.documentElement.setAttribute('data-theme', t); } catch (e) {}</script>
@@ -75,6 +75,15 @@
              same card to the Blog section of the homepage. Also add the URL to sitemap.xml and to the
              "blogPost" list in the JSON-LD above. -->
         <div class="post-list">
+          <a class="post-card" href="splitting-gpus/">
+            <div class="post-cover"><img src="splitting-gpus/og.png" width="1200" height="630" alt=""></div>
+            <div class="post-text">
+              <p class="kicker">Inference · Part 2 <span class="muted">· 25 Nov 2026 · 11 min read</span></p>
+              <h2>Eight GPUs with no fast links, and three predictions I got wrong</h2>
+              <p>Qwen3-32B on eight NVIDIA L40S with no peer-to-peer links: one copy across all eight GPUs, or four small copies? Three engines and two benchmark tools, measured over 146,232 requests against predictions committed before the first run.</p>
+              <span class="go">Read post →</span>
+            </div>
+          </a>
           <a class="post-card" href="serving-engines/">
             <div class="post-cover"><img src="serving-engines/og.png" width="1200" height="630" alt=""></div>
             <div class="post-text">

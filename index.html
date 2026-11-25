@@ -348,6 +348,15 @@
         <!-- Newest post first. To add a post, copy one <a class="post-card"> block, put it at the top,
              and add the same card to blog/index.html. The cover is the post's 1200x630 og.png. -->
         <div class="post-list">
+          <a class="post-card" href="blog/splitting-gpus/">
+            <div class="post-cover"><img src="blog/splitting-gpus/og.png" width="1200" height="630" alt="" loading="lazy"></div>
+            <div class="post-text">
+              <p class="kicker">Inference · Part 2 <span class="muted">· 25 Nov 2026 · 11 min read</span></p>
+              <h3>Eight GPUs with no fast links, and three predictions I got wrong</h3>
+              <p>Qwen3-32B on eight NVIDIA L40S with no peer-to-peer links: one copy across all eight GPUs, or four small copies? Three engines and two benchmark tools, measured over 146,232 requests against predictions committed before the first run.</p>
+              <span class="go">Read post →</span>
+            </div>
+          </a>
           <a class="post-card" href="blog/serving-engines/">
             <div class="post-cover"><img src="blog/serving-engines/og.png" width="1200" height="630" alt="" loading="lazy"></div>
             <div class="post-text">
