@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Making a 32B model smaller: about 2.5x cheaper, for 1-2 points of accuracy — Anjaneyalu T</title>
+  <meta name="description" content="Qwen3-32B in BF16, FP8 and 4-bit on eight NVIDIA L40S, with three engines, measured over 97,488 requests and the full GSM8K test against predictions committed before the first run. Inference, Part 3.">
+  <meta name="author" content="Anjaneyalu T">
+  <link rel="canonical" href="https://anjaneyaluaj.github.io/blog/quantization/">
+  <meta name="theme-color" content="#0a0f26">
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="Anjaneyalu T">
+  <meta property="og:title" content="Making a 32B model smaller: about 2.5x cheaper, for 1-2 points of accuracy">
+  <meta property="og:description" content="Qwen3-32B in BF16, FP8 and 4-bit on eight NVIDIA L40S, with three engines, measured over 97,488 requests and the full GSM8K test against predictions committed before the first run.">
+  <meta property="og:url" content="https://anjaneyaluaj.github.io/blog/quantization/">
+  <meta property="og:image" content="https://anjaneyaluaj.github.io/blog/quantization/og.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="article:published_time" content="2026-11-26">
+  <meta property="article:author" content="Anjaneyalu T">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Making a 32B model smaller: about 2.5x cheaper, for 1-2 points of accuracy">
+  <meta name="twitter:description" content="Qwen3-32B in BF16, FP8 and 4-bit on eight NVIDIA L40S, measured over 97,488 requests and the full GSM8K test.">
+  <meta name="twitter:image" content="https://anjaneyaluaj.github.io/blog/quantization/og.png">
+  <script type="application/ld+json">
+  {"@context":"https://schema.org","@type":"BlogPosting","headline":"Making a 32B model smaller: about 2.5x cheaper, for 1-2 points of accuracy","description":"Qwen3-32B in BF16, FP8 and 4-bit on eight NVIDIA L40S, with three engines, measured over 97,488 requests and the full GSM8K test against predictions committed before the first run. Inference, Part 3.","datePublished":"2026-11-26","author":{"@type":"Person","name":"Anjaneyalu T","url":"https://anjaneyaluaj.github.io/"},"image":"https://anjaneyaluaj.github.io/blog/quantization/og.png","url":"https://anjaneyaluaj.github.io/blog/quantization/"}
+  </script>
+  <link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+  <script>try { var t = localStorage.getItem('theme'); if (t === 'dark' || t === 'light') document.documentElement.setAttribute('data-theme', t); } catch (e) {}</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Merriweather:wght@300;400;700;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../../assets/style.css">
+  <link rel="stylesheet" href="../../assets/post.css">
+  <style>
+    /* Post-specific: engine colours (match the charts) and the predictions scorecard. */
+    .post { --vllm: #2a7ad5; --sglang: #e2622d; --trt: #16a06d; --chart-bg: #fbfbf9; --held: #16a06d; --wrong: #c2410c; --mixed: #b7791f; }
+    :root[data-theme="dark"] .post { --vllm: #6aa8ee; --sglang: #f08a5d; --trt: #4cc896; --held: #4cc896; --wrong: #f08a5d; --mixed: #e0b057; }
+    .post .eng-v { color: var(--vllm); font-weight: 700; }
+    .post .eng-s { color: var(--sglang); font-weight: 700; }
+    .post .eng-t { color: var(--trt); font-weight: 700; }
+    .post td.r, .post th.r { text-align: right; white-space: nowrap; }
+    .post .tbl table { overflow-wrap: normal; }
+    .post td.lead { font-weight: 700; }
+    .post .verdict { font-weight: 700; white-space: nowrap; }
+    .post .verdict.held { color: var(--held); }
+    .post .verdict.wrong { color: var(--wrong); }
+    .post .verdict.mixed { color: var(--mixed); }
+    .post figure img { display: block; width: 100%; height: auto; border-radius: 10px; border: 1px solid var(--line); background: var(--chart-bg); }
+    .post .lessons { list-style: none; padding-left: 0; counter-reset: l; }
+    .post .lessons li { display: grid; grid-template-columns: 2rem 1fr; gap: 8px; margin-top: 18px; }
+    .post .lessons li::before { counter-increment: l; content: counter(l); font-family: var(--head); font-weight: 900; font-size: 1.3rem; color: var(--accent); line-height: 1.4; }
+    .post .lessons li > div { min-width: 0; }
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="nav">
+    <div class="container">
+      <a class="brand" href="../../"><span class="brand-mark">AT</span>Anjaneyalu T</a>
+      <nav aria-label="Primary">
+        <ul class="nav-links" id="nav-links">
+          <li><a href="../../#about">About</a></li>
+          <li><a href="../../#series">Technical Series</a></li>
+          <li><a href="../">Blog</a></li>
+          <li><a href="../../#open-source">Open Source</a></li>
+          <li><a href="../../#talks">Talks &amp; Workshops</a></li>
+          <li><a href="../../#contact">Contact</a></li>
+        </ul>
+      </nav>
+      <div class="nav-actions">
+        <button class="icon-btn theme-toggle" id="theme-toggle" type="button" aria-label="Switch to dark mode">
+          <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+          <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5a8.5 8.5 0 1 0 11 11z"/></svg>
+        </button>
+        <a class="nav-cta" href="../../#contact">Get in touch</a>
+        <button class="icon-btn menu-toggle" id="menu-toggle" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="nav-links">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main id="main" class="post">
+<div class="wrap">
+<article>
+
+<header class="col">
+  <a class="back" href="../">&larr; All posts</a>
+  <div class="eyebrow">Inference, Part 3 &middot; Quantization</div>
+  <h1>Making a 32B model smaller: about 2.5x cheaper, for 1-2 points of accuracy</h1>
+  <p class="lede">The same 32B model in 16-bit, 8-bit and 4-bit, on the same eight GPUs. Smaller numbers let each copy fit on one GPU. How much faster does that make it, and what does it cost in answers? Three engines, 97,488 requests, and every question in a math test.</p>
+  <div class="byline"><span>Anjaneyalu T</span><span>26 November 2026</span><span>About 10 minutes</span></div>
+  <div class="status">
+    <p><b>Code and data:</b> <a href="https://github.com/AnjaneyaluAJ/llm-inference">AnjaneyaluAJ/llm-inference</a>. The plan with its predictions, every request, every answer, and the server and GPU logs.</p>
+    <p><b>Measured:</b> 25 to 26 November 2026, on the same AWS g6e.48xlarge (8x NVIDIA L40S) as Part 2.</p>
+  </div>
+</header>
+
+<section class="col">
+  <p>In <a href="../splitting-gpus/">Part 2</a>, Qwen3-32B needed at least two GPUs, because its 16-bit weights take 65.5 GB and an L40S has 48 GB. On that machine the GPUs have no fast link between them, and the best way to use eight of them under load was four copies of two GPUs each.</p>
+  <p>Quantization stores the weights in fewer bits. The model gets smaller, and two things could follow: each token needs fewer bytes read from memory, and the model may fit on one GPU, so the GPUs stop talking to each other at all. The question is how much speed that buys, and how much answer quality it costs.</p>
+  <div class="tbl"><table>
+    <thead><tr><th>Format</th><th class="r">Weights</th><th>Splits tested</th></tr></thead>
+    <tbody>
+      <tr><td>BF16 (16-bit)</td><td class="r">65.5 GB</td><td>2 GPUs per copy (Part 2's best)</td></tr>
+      <tr><td>FP8 (8-bit)</td><td class="r">34.3 GB</td><td>2 GPUs, and 1 GPU per copy</td></tr>
+      <tr><td>INT4 (4-bit)*</td><td class="r">about 19.5 GB</td><td>2 GPUs, and 1 GPU per copy</td></tr>
+    </tbody>
+  </table></div>
+  <p class="post-note">Checkpoints: <code>Qwen/Qwen3-32B</code>, <code>Qwen/Qwen3-32B-FP8</code> and <code>RedHatAI/Qwen3-32B-quantized.w4a16</code>. *The plan used Qwen's own 4-bit (AWQ) checkpoint first. It did not work, as explained below, so INT4 here is Red Hat's GPTQ version, the fallback the plan named in advance. Both 4-bit formats keep the activations in 16-bit. I quantized nothing myself: every checkpoint is a published one.</p>
+  <p>With one GPU per copy, the eight GPUs run eight independent copies (tp1dp8). With two, they run four (tp2dp4).</p>
+
+  <h2>The setup</h2>
+  <ul>
+    <li><strong>Hardware and engines:</strong> the same instance and the same images as Part 2. <span class="eng-v">vLLM</span> v0.34.0, <span class="eng-s">SGLang</span> v0.5.23 and <span class="eng-t">TensorRT-LLM</span> 1.3.0, at default settings, with only the context length (8,192) and the split set. The KV cache (each user's context) stays 16-bit everywhere.</li>
+    <li><strong>Traffic:</strong> chat (1k tokens in, 256 out), RAG (4k in, 128 out) and generate (128 in, 1k out), at 1, 16, 64 and 256 users at once, two repeats in shuffled order. 97,488 requests in all, over about 20 hours. 230 of them, all on generate and all on vLLM or TensorRT-LLM, came back with no text, the same engine issue as in Part 2; they are counted as failures and left out of the throughput.</li>
+    <li><strong>Quality:</strong> every combination answered all 1,319 questions of the GSM8K math test, with greedy decoding. I compared each one's answers question by question with the 16-bit model on the same engine.</li>
+    <li><strong>A control:</strong> BF16 was measured again in this run. It matched Part 2 to within 0.2% at the median, and no point differed by more than 3%, so the two parts can be compared directly.</li>
+  </ul>
+
+  <h2>First: which checkpoints actually work</h2>
+  <p>Before the sweep, every engine loaded every checkpoint and answered 20 test questions. That check turned out to matter.</p>
+  <ul>
+    <li><strong>Qwen's 4-bit checkpoint started on vLLM and SGLang, and then wrote nonsense.</strong> Asked a math question, vLLM answered "locklocklocklock..." and SGLang "!!!!!!!!...", for all 20 questions on both. Neither server failed to start. If I had only checked that, every 4-bit number in this post would have been the speed of producing garbage. I did not confirm the cause. One clue: vLLM logged thousands of warnings about loading 16-bit (BF16) weights into parameters of a different 16-bit type (FP16), and none with Red Hat's checkpoint. Red Hat's 4-bit version scored 17-18 of 20 on both and is what I used.</li>
+    <li><strong>TensorRT-LLM ran only the 2-GPU 16-bit and 8-bit setups.</strong> With one GPU per copy, it ran out of memory at start-up with both 8-bit checkpoints: the model already took about 32.5 of the GPU's 44.4 GiB when it failed, and its default settings did not leave room. It could not start either 4-bit checkpoint. Changing its memory settings might fix the first problem, but that is tuning, which this plan excluded.</li>
+  </ul>
+  <p>So 12 of the 15 planned combinations ran: 3 engines on 16-bit and 2-GPU 8-bit, and vLLM and SGLang on the rest.</p>
+
+  <h2>The predictions</h2>
+  <p>As in Parts 1 and 2, I committed the predictions to GitHub before anything ran. The ceiling for one user is the same arithmetic: every token reads all the weights once, at 746.7 GB/s per GPU. Half the bytes means twice the ceiling.</p>
+  <div class="tbl"><table>
+    <thead><tr><th>#</th><th>Prediction</th><th>Result</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>One user: 4-bit on 2 GPUs is the fastest of all; 8-bit on 1 GPU is no faster than 16-bit on 2</td><td><span class="verdict held">Held</span> 60.1 tokens/s; 21.0 vs 21.0</td></tr>
+      <tr><td>2</td><td>Many users: the best 8-bit setup has at least 1.4x the peak of 16-bit on chat and generate</td><td><span class="verdict wrong">Wrong on generate</span> 1.41x chat, 1.35x generate</td></tr>
+      <tr><td>3</td><td>At 256 users, 8-bit beats 4-bit on chat and generate</td><td><span class="verdict wrong">Wrong</span> best 4-bit was 1.8x best 8-bit (1.8-2.3x within each engine)</td></tr>
+      <tr><td>4</td><td>8-bit on 1 GPU has the least context room, so 2 GPUs per copy beats it on RAG and chat at 256 users</td><td><span class="verdict mixed">Partly wrong</span> the memory part held, but 1 GPU per copy won by 1.2-1.5x</td></tr>
+      <tr><td>5</td><td>8-bit within 1 point of 16-bit on GSM8K, 4-bit within 3; same final answer on at least 95% (8-bit) and 90% (4-bit) of questions</td><td><span class="verdict mixed">Partly wrong</span> accuracy mostly held; 8-bit agreed on 93-95%</td></tr>
+      <tr><td>6</td><td>At least one engine cannot serve an official checkpoint without the fallback; most likely TensorRT-LLM with 4-bit</td><td><span class="verdict held">Held</span> and worse: no engine ran Qwen's 4-bit correctly</td></tr>
+    </tbody>
+  </table></div>
+
+  <h2>One user: fewer bytes per GPU is faster</h2>
+  <p>With one user, speed follows the bytes each GPU must read per token. 8-bit on one GPU reads 34.3 GB per token; 16-bit on two GPUs reads 32.8 GB on each. So they run at the same speed: 21.0 tokens/s on vLLM for both. 4-bit on two GPUs reads the least per GPU and was the fastest: 60.1 tokens/s on SGLang and 57.2 on vLLM, almost 3x the 16-bit model.</p>
+  <figure>
+    <img src="02_one_user.png" alt="Bar chart of one-user generation speed by format and split. BF16 on 2 GPUs: about 21 tokens per second on all engines. FP8 on 2 GPUs: 26.4 to 36.0. FP8 on 1 GPU: 15.7 and 21.0. INT4 on 2 GPUs: 57.2 and 60.1. INT4 on 1 GPU: 37.2 and 38.0." loading="lazy" width="1200" height="1200">
+    <figcaption>On one GPU, vLLM's 8-bit and both engines' 4-bit reached 96-99% of the limit. Split over two GPUs, they reached 74-83% of theirs.</figcaption>
+  </figure>
+  <p>The second thing the chart shows is the cost of the link from Part 2. On one GPU, vLLM's 8-bit and both 4-bit runs got within 1-4% of the memory limit (for 4-bit, using the 19.5 GB that Red Hat's checkpoint takes in memory). Split over two GPUs, 4-bit reached only 74-78% of its limit. The faster each GPU finishes its share, the bigger the fixed cost of talking to the other one becomes.</p>
+
+  <h2>Many users: 4-bit on one GPU each wins, by a lot</h2>
+  <figure>
+    <img src="01_peak.png" alt="Grouped bar charts of peak throughput for chat, RAG and generate by format and split. INT4 with one GPU per copy is highest on every workload, at about 2,700 to 2,800 tokens per second on chat, 470 to 500 on RAG and 6,500 on generate, against about 1,000 to 1,100, 185 to 214 and 2,100 to 2,700 for BF16." loading="lazy" width="1200" height="1200">
+  </figure>
+  <p>Eight 4-bit copies, one per GPU, had the highest peak on every workload and both engines that ran it. Against 16-bit on the same engine, that is 2.3-3.1x the throughput. On vLLM, generate went from 2,678 tokens/s to 6,568.</p>
+  <p>The best 8-bit setup managed 1.1-1.7x. And for both formats, one GPU per copy beat two GPUs per copy on every workload, with a single exception (SGLang 8-bit on generate, below).</p>
+
+  <h2>What I got wrong</h2>
+  <h3>Predictions 2 and 3: FP8 did not run as FP8 everywhere</h3>
+  <p>I expected 8-bit to do well under load for a specific reason: the L40S has FP8 tensor cores, which multiply 8-bit numbers twice as fast as 16-bit ones. Once many users share each pass through the weights, that arithmetic speed should matter. And I expected 4-bit to fall behind, because its weights must be unpacked to 16-bit before every multiply.</p>
+  <p>The server logs show the engines did three different things with the same 8-bit checkpoint:</p>
+  <ul>
+    <li><strong><span class="eng-v">vLLM</span> did not use FP8 arithmetic at all.</strong> At start-up it logs: "Your GPU does not have native support for FP8 computation but FP8 quantization is being used. Weight-only FP8 compression will be used leveraging the Marlin kernel." With this checkpoint's format on this GPU, it stores the weights in 8-bit and multiplies in 16-bit, exactly as it does for 4-bit.</li>
+    <li><strong><span class="eng-s">SGLang</span> did use FP8 arithmetic,</strong> but warned at start-up "Using default W8A8 Block FP8 kernel config. Performance might be sub-optimal!": it has no tuned settings for the L40S.</li>
+    <li><strong><span class="eng-t">TensorRT-LLM</span> also used FP8 arithmetic,</strong> with its auto-tuner falling back to a default for some matrix shapes.</li>
+  </ul>
+  <p>So on vLLM, 8-bit and 4-bit were the same method with different byte counts, and 4-bit simply read half as much. Did FP8 arithmetic help where it was used? Not clearly. Under load, TensorRT-LLM's FP8 beat vLLM's weight-only FP8 on the same 2-GPU split by 9% on generate (3,549 against 3,244 tokens/s), but SGLang's FP8 was the slowest of the three. Neither came close to the gain from 4-bit.</p>
+  <p>As for unpacking 4-bit weights getting expensive as the batch grows: that only happens once the batch is large enough for arithmetic, not memory reads, to set the pace. With 256 users spread over eight copies, each copy handles at most 32 at a time. 4-bit also leaves each GPU about 3x the context room of 8-bit (89,600 tokens against 30,208 on vLLM). I did not measure these two effects separately, so I cannot say how much of the gap each one explains.</p>
+
+  <h3>Prediction 4: less memory, but no communication</h3>
+  <p>The memory part was right. 8-bit on one GPU had the least room for context of any setup: 30k tokens per copy on vLLM and about 20k on SGLang. Eight such copies hold 242k tokens in all, against 774k for four 2-GPU copies.</p>
+  <p>It won anyway, by 1.2-1.3x on chat and 1.4-1.5x on RAG at 256 users. RAG is the workload where Part 2 found tensor parallelism hurts most: on this machine, reading a long prompt across GPUs costs a lot of communication. A copy on one GPU sends nothing to any other GPU. That is my explanation, consistent with Part 2, not a separate measurement.</p>
+  <p>The memory limit did show up in one place. SGLang 8-bit on generate at 256 users had about 20k tokens of room per copy, and up to 32 requests of 1,152 tokens each wanting it. Its median user waited 63 seconds for the first token, and two GPUs per copy beat one there (2,804 tokens/s against 2,042). It is the one exception to the pattern.</p>
+
+  <h3>Prediction 5: I set the agreement bar higher than 16-bit itself clears</h3>
+  <figure>
+    <img src="03_quality.png" alt="Dot plot of GSM8K accuracy with 95% intervals. BF16 93.0 to 93.3 percent. FP8 92.2 to 93.8 percent, agreeing with BF16 on 93.4 to 95.1 percent of answers. INT4 90.8 to 92.2 percent, agreeing on 90.4 to 91.4 percent." loading="lazy" width="1200" height="1200">
+  </figure>
+  <p>On accuracy the prediction mostly held. 8-bit was within 1 point of 16-bit on the same engine in four of five runs, and 1.1 points lower in the fifth. None of those differences can be told apart from chance by a paired test. 4-bit lost 1.1-2.2 points, inside the 3 I allowed, and in three of its four runs that loss is real (paired McNemar test, p &lt; 0.05).</p>
+  <p>I also predicted that 8-bit would give the same final answer as 16-bit on at least 95% of questions. Two of five runs got there; the others were at 93.4-94.7%. But the three 16-bit engines, running the same weights, agree with each other on only 96.4-97.0% of questions. Small numerical differences between engines change 3-4% of answers on their own. A 95% bar for a different format was close to that ceiling, and too tight.</p>
+
+  <h2>What it costs</h2>
+  <p>At $30.13 an hour for the instance, divided by peak throughput:</p>
+  <div class="tbl"><table>
+    <thead><tr><th>Per million output tokens, vLLM</th><th class="r">Chat</th><th class="r">RAG</th><th class="r">Generate</th></tr></thead>
+    <tbody>
+      <tr><td>16-bit, 2 GPUs per copy</td><td class="r">$7.42</td><td class="r">$39.14</td><td class="r">$3.13</td></tr>
+      <tr><td>8-bit, 1 GPU per copy</td><td class="r">$5.26</td><td class="r">$26.38</td><td class="r">$2.32</td></tr>
+      <tr><td>4-bit, 1 GPU per copy</td><td class="r lead">$3.00</td><td class="r lead">$16.72</td><td class="r lead">$1.27</td></tr>
+    </tbody>
+  </table></div>
+  <p class="post-note">At peak throughput with no latency target. At 256 users, 4-bit's median wait for a first token was 0.8-3.2 seconds on chat and generate but 26 seconds on RAG. Other engines are in the <a href="https://github.com/AnjaneyaluAJ/llm-inference/tree/main/results/step3">write-up</a>.</p>
+  <p>On vLLM, 4-bit is 2.3-2.5x cheaper than 16-bit on the same machine, for 1.7 points of GSM8K accuracy (on SGLang, 2.6-3.1x cheaper). Whether that trade is worth it depends on the use. For a math tutor, maybe not. For summarizing documents at scale, probably. 8-bit is 1.3-1.5x cheaper on vLLM, with no measurable loss.</p>
+
+  <h2>What I learned</h2>
+  <ol class="lessons">
+    <li><div><strong>Check that the answers are right, not just that the server starts.</strong> An official checkpoint loaded on two engines without an error and produced nothing but repeated tokens. Only a quality check before the benchmark caught it.</div></li>
+    <li><div><strong>Read the start-up logs.</strong> "FP8" meant three different things on three engines. On vLLM it meant 8-bit storage with 16-bit arithmetic, which changes the reasoning behind any prediction about it. The label on the checkpoint is not what runs.</div></li>
+    <li><div><strong>On GPUs without fast links, fitting on one GPU is worth a lot.</strong> Under load, one GPU per copy beat two on every workload but one, even with a quarter to a third of the total context room. Most likely, removing communication mattered more than memory.</div></li>
+    <li><div><strong>Measure quality question by question.</strong> Overall accuracy moved by 1-2 points, about the uncertainty of a single run. Comparing answers in pairs showed that 4-bit's loss was real in three of four runs, and found no loss for 8-bit.</div></li>
+    <li><div><strong>Know the noise floor before setting a bar.</strong> Three engines running identical 16-bit weights disagree on 3-4% of answers. Any agreement target for a quantized model has to start from there.</div></li>
+  </ol>
+
+  <h2>What this does not show</h2>
+  <ul>
+    <li>One model, one GPU type, default engine settings. On H100-class GPUs, where vLLM does use FP8 arithmetic, 8-bit could rank differently.</li>
+    <li>One 4-bit checkpoint. Other 4-bit methods may differ in speed and quality.</li>
+    <li>GSM8K is one test of short arithmetic reasoning. It says nothing about long documents, code or other languages. Quality comes from one run per setup.</li>
+    <li>Peaks with no latency target, two repeats. The median difference between repeats was 0.3%, and 143 of 144 points were within 5%.</li>
+    <li>The costs and the explanations for predictions 2-4 were worked out after the run. They were not predictions.</li>
+  </ul>
+
+  <hr>
+  <h2>Next</h2>
+  <p>Every number in this series so far is a peak, reached with users waiting seconds or minutes for a first token. Nobody deploys that way. Next I want to measure what each setup serves while keeping the wait under a fixed limit, and what tuning the engines' settings changes about the ranking.</p>
+  <p>Write-up: <a href="https://github.com/AnjaneyaluAJ/llm-inference/tree/main/results/step3">results/step3</a> &middot; Plan and predictions: <a href="https://github.com/AnjaneyaluAJ/llm-inference/blob/main/docs/step3_quant_plan.md">docs/step3_quant_plan.md</a></p>
+
+  <p class="post-note">Anjaneyalu T. Questions and corrections are welcome: <a href="mailto:anjaneyalu.thippaiah@gmail.com">email</a> or <a href="https://www.linkedin.com/in/anjaneyalu-t-83615661">LinkedIn</a>.</p>
+</section>
+
+</article>
+</div>
+  </main>
+
+  <footer>
+    <div class="container">
+      <span>© <span id="year">2026</span> Anjaneyalu T · Hyderabad, India</span>
+      <span><a href="../../">Home</a> · <a href="https://github.com/AnjaneyaluAJ" target="_blank" rel="noopener">GitHub</a> · <a href="https://www.linkedin.com/in/anjaneyalu-t-83615661" target="_blank" rel="noopener">LinkedIn</a></span>
+    </div>
+  </footer>
+  <script src="../../assets/main.js" defer></script>
+</body>
+</html>
